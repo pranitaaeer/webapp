@@ -13,6 +13,7 @@ async function apiRequest<T>(endpoint: string): Promise<T> {
 export const api = {
   getDashboard: () => apiRequest("/dashboard/summary"),
   getFlightRequests: () => apiRequest("/flight-requests"),
+  getFlightRequestById: (id: string) => apiRequest(`/flight-requests/${id}`),
   getAircraft: () => apiRequest("/aircraft"),
   getCrew: () => apiRequest("/crew"),
   getPassengers: () => apiRequest("/passengers"),

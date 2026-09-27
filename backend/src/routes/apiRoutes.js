@@ -6,6 +6,7 @@ import {
 
 import {
   getFlightRequests,
+  getFlightRequestById,
 } from "../controllers/flight.controller.js";
 
 import {
@@ -16,6 +17,7 @@ import {
   getCrew,
   getPassengers,
 } from "../controllers/people.controller.js";
+
 
 const router = express.Router();
 
@@ -35,5 +37,9 @@ router.get("/aircraft", getAircraft);
 router.get("/crew", getCrew);
 
 router.get("/passengers", getPassengers);
+
+router.get("/flight-requests", getFlightRequests);
+
+router.get("/flight-requests/:id", getFlightRequestById);
 
 export default router;
