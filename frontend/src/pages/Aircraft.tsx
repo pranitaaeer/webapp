@@ -451,8 +451,12 @@ function Aircraft() {
                   <div>
                     <span>Aircraft type</span>
                     <strong>
-                      {details?.AircraftType ??
-                        selectedAircraft.type ??
+                      {details?.AircraftType?.trim() ||
+                        details?.AircaftCategory?.trim() ||
+                        (details?.ACICAOcode
+                          ? `${details.AircraftManfacturer ?? ""} (${details.ACICAOcode})`.trim()
+                          : "") ||
+                        selectedAircraft.type?.trim() ||
                         "—"}
                     </strong>
                   </div>
