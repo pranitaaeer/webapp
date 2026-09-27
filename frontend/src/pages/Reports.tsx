@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "../style/Reports.css";
 import { api } from "../services/api";
+import Loader from "../components/Loader";
 
 type FlightStatus =
   | "Processing"
@@ -690,7 +691,7 @@ export default function Reports() {
       {loading && (
         <div className="reports-message">
           <div className="reports-loader" />
-          <p>Loading flight reports...</p>
+          <p><Loader /></p>
         </div>
       )}
 

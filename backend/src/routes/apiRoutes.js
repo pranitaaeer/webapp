@@ -2,6 +2,7 @@ import express from "express";
 
 import {
   getDashboardSummary,
+  getRecentFlights,
 } from "../controllers/dashboard.controller.js";
 
 import {
@@ -11,10 +12,13 @@ import {
 
 import {
   getAircraft,
+  getAircraftById,
 } from "../controllers/aircraft.controller.js";
 
 import {
   getCrew,
+  getCrewById,
+  getPassengerById,
   getPassengers,
 } from "../controllers/people.controller.js";
 
@@ -29,14 +33,18 @@ router.get("/health", (req, res) => {
 });
 
 router.get("/dashboard/summary", getDashboardSummary);
+router.get("/dashboard/recent-flights", getRecentFlights);
 
 router.get("/flight-requests", getFlightRequests);
 
 router.get("/aircraft", getAircraft);
+router.get("/aircraft/:id", getAircraftById);
 
 router.get("/crew", getCrew);
+router.get("/crew/:id", getCrewById);
 
 router.get("/passengers", getPassengers);
+router.get("/passengers/:id", getPassengerById);
 
 router.get("/flight-requests", getFlightRequests);
 

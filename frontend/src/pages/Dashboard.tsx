@@ -1,3 +1,6 @@
+
+
+
 import { useEffect, useMemo, useState } from "react";
 import FlightRequests from "./FlightRequests";
 import "../App.css";
@@ -5,6 +8,8 @@ import Aircraft from "./Aircraft";
 import CrewPassengers from "./CrewPassengers";
 import Reports from "./Reports";
 import { api } from "../services/api";
+import Loader from "../components/Loader";
+import { useNavigate } from "react-router-dom";
 
 type FlightStatus =
   | "Processing"
@@ -38,79 +43,6 @@ const emptySummary: DashboardSummary = {
   totalPassengers: 0,
 };
 
-const flights: Flight[] = [
-  {
-    id: "SR-2048",
-    route: "BOM → DXB",
-    from: "Mumbai",
-    to: "Dubai",
-    aircraft: "Gulfstream G650",
-    date: "25 Sep 2026",
-    status: "Active",
-    passengers: 8,
-  },
-  {
-    id: "SR-2047",
-    route: "DEL → LHR",
-    from: "New Delhi",
-    to: "London",
-    aircraft: "Bombardier Global 7500",
-    date: "25 Sep 2026",
-    status: "Confirmed",
-    passengers: 10,
-  },
-  {
-    id: "SR-2046",
-    route: "BLR → SIN",
-    from: "Bengaluru",
-    to: "Singapore",
-    aircraft: "Embraer Praetor 600",
-    date: "26 Sep 2026",
-    status: "Processing",
-    passengers: 6,
-  },
-  {
-    id: "SR-2045",
-    route: "GOI → BOM",
-    from: "Goa",
-    to: "Mumbai",
-    aircraft: "Cessna Citation X",
-    date: "26 Sep 2026",
-    status: "Confirmed",
-    passengers: 5,
-  },
-  {
-    id: "SR-2044",
-    route: "DXB → CDG",
-    from: "Dubai",
-    to: "Paris",
-    aircraft: "Dassault Falcon 8X",
-    date: "27 Sep 2026",
-    status: "Processing",
-    passengers: 9,
-  },
-  {
-    id: "SR-2043",
-    route: "HYD → DEL",
-    from: "Hyderabad",
-    to: "New Delhi",
-    aircraft: "Gulfstream G550",
-    date: "27 Sep 2026",
-    status: "Closed",
-    passengers: 4,
-  },
-  {
-    id: "SR-2042",
-    route: "BOM → SIN",
-    from: "Mumbai",
-    to: "Singapore",
-    aircraft: "Bombardier Challenger 650",
-    date: "28 Sep 2026",
-    status: "Declined",
-    passengers: 7,
-  },
-];
-
 const navItems = [
   { name: "Dashboard", icon: "▦" },
   { name: "Flight Requests", icon: "✈" },
@@ -127,35 +59,140 @@ const statusClass: Record<FlightStatus, string> = {
   Declined: "declined",
 };
 
+const getValue = (
+  row: Record<string, unknown>,
+  keys: string[],
+  fallback = "—"
+): string => {
+  for (const key of keys) {
+    const value = row[key];
+
+    if (value !== null && value !== undefined && value !== "") {
+      return String(value);
+    }
+  }
+
+  return fallback;
+};
+
+const getNumber = (
+  row: Record<string, unknown>,
+  keys: string[]
+): number => {
+  const value = getValue(row, keys, "0");
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const normalizeStatus = (value: string): FlightStatus => {
+  const status = value.toLowerCase();
+
+  if (status.includes("confirm")) return "Confirmed";
+  if (status.includes("active")) return "Active";
+
+  if (status.includes("closed") || status.includes("complete")) {
+    return "Closed";
+  }
+
+  if (status.includes("declin") || status.includes("reject")) {
+    return "Declined";
+  }
+
+  // ✅ NAYA: Quotecancelled / Tripcancelled ko Declined banao
+  if (status.includes("cancel") || status.includes("fire")) {
+    return "Declined";
+  }
+
+  return "Processing";
+};
+
+const formatDate = (value?: string) => {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const mapFlightRow = (row: Record<string, unknown>): Flight => {
+  const id = getValue(row, ["SRID"], "N/A");
+  const from = getValue(row, ["FromAirport"], "—");
+  const to = getValue(row, ["ToAirport"], "—");
+  const aircraft = getValue(row, ["AircraftName"], "");
+  const type = getValue(row, ["AircraftType"], "");
+
+  return {
+    id: id === "N/A" ? id : `SR-${id}`,
+    route: `${from} → ${to}`,
+    from,
+    to,
+    aircraft: aircraft && type ? `${aircraft} (${type})` : aircraft || type || "—",
+    date: formatDate(
+      getValue(row, ["FlightDate", "DateCreated"], "")
+    ),
+    status: normalizeStatus(
+      getValue(row, ["Status"], "Processing")
+    ),
+    passengers: getNumber(row, ["PassengerCount"]),
+  };
+};
+
 function Dashboard() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [activeNav, setActiveNav] = useState("Dashboard");
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [flights, setFlights] = useState<Flight[]>([]);
+  const [, setFlightsLoading] = useState(true);
+  const [openRowMenu, setOpenRowMenu] = useState<string | null>(null);
+  const [deleteFlight, setDeleteFlight] = useState<Flight | null>(null);
 
-  // Backend dashboard data
   const [summary, setSummary] =
     useState<DashboardSummary>(emptySummary);
 
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState("");
 
-  // Fetch dashboard summary from backend
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("avplat_demo_logged_in");
+    navigate("/login");
+  };
+
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
         setLoading(true);
         setApiError("");
 
-        const response = (await api.getDashboard()) as {
-          success: boolean;
-          data: DashboardSummary;
-        };
+        const [summaryRes, flightsRes] = await Promise.all([
+          api.getDashboard() as Promise<{
+            success: boolean;
+            data: DashboardSummary;
+          }>,
+          api.getRecentFlights() as Promise<{
+            success: boolean;
+            data: Record<string, unknown>[];
+          }>,
+        ]);
 
-        if (!response.success) {
+        if (!summaryRes.success) {
           throw new Error("Failed to load dashboard data");
         }
 
-        setSummary(response.data);
+        setSummary(summaryRes.data);
+
+        const rows = Array.isArray(flightsRes.data)
+          ? flightsRes.data
+          : [];
+
+        setFlights(rows.map(mapFlightRow));
       } catch (error) {
         setApiError(
           error instanceof Error
@@ -164,6 +201,7 @@ function Dashboard() {
         );
       } finally {
         setLoading(false);
+        setFlightsLoading(false);
       }
     };
 
@@ -188,7 +226,8 @@ function Dashboard() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [search, statusFilter]);
+    // ✅ FIX: flights dependency add ki
+  }, [flights, search, statusFilter]);
 
   // Stats from backend
   const stats = [
@@ -239,9 +278,8 @@ function Dashboard() {
           {navItems.map((item) => (
             <button
               key={item.name}
-              className={`nav-item ${
-                activeNav === item.name ? "selected" : ""
-              }`}
+              className={`nav-item ${activeNav === item.name ? "selected" : ""
+                }`}
               onClick={() => setActiveNav(item.name)}
             >
               <span className="nav-icon">{item.icon}</span>
@@ -267,11 +305,36 @@ function Dashboard() {
 
           <div className="profile">
             <div className="avatar">AU</div>
+
             <div className="profile-info">
               <strong>Admin User</strong>
               <span>Administrator</span>
             </div>
-            <span className="profile-menu">⋯</span>
+
+            <div className="profile-menu-wrapper">
+              <button
+                type="button"
+                className="profile-menu"
+                aria-label="Profile menu"
+                aria-expanded={showProfileMenu}
+                onClick={() => setShowProfileMenu((prev) => !prev)}
+              >
+                ⋯
+              </button>
+
+              {showProfileMenu && (
+                <div className="profile-dropdown">
+                  <button
+                    type="button"
+                    className="dropdown-item logout-item"
+                    onClick={handleLogout}
+                  >
+                    <span>↪</span>
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </aside>
@@ -343,14 +406,14 @@ function Dashboard() {
                     );
                   }}
                 >
-                  <span>＋</span> New Flight Request
+                  <span>+</span> New Flight Request
                 </button>
               </section>
 
               {/* API Loading and Error */}
               {loading && (
                 <p className="api-message">
-                  Loading dashboard data...
+                  <Loader />
                 </p>
               )}
 
@@ -500,9 +563,8 @@ function Dashboard() {
 
                           <td>
                             <span
-                              className={`status-badge ${
-                                statusClass[flight.status]
-                              }`}
+                              className={`status-badge ${statusClass[flight.status]
+                                }`}
                             >
                               <span className="badge-dot" />
                               {flight.status}
@@ -510,15 +572,37 @@ function Dashboard() {
                           </td>
 
                           <td>
-                            <button
-                              className="row-menu"
-                              aria-label={`Actions for ${flight.id}`}
-                              onClick={() =>
-                                alert(`Selected ${flight.id}`)
-                              }
-                            >
-                              ⋯
-                            </button>
+                            <div className="row-menu-wrapper">
+                              <button
+                                type="button"
+                                className="row-menu"
+                                aria-label={`Actions for ${flight.id}`}
+                                aria-expanded={openRowMenu === flight.id}
+                                onClick={() =>
+                                  setOpenRowMenu((prev) =>
+                                    prev === flight.id ? null : flight.id
+                                  )
+                                }
+                              >
+                                ⋯
+                              </button>
+
+                              {openRowMenu === flight.id && (
+                                <div className="row-dropdown">
+                                  <button
+                                    type="button"
+                                    className="row-dropdown-item"
+                                    onClick={() => {
+                                      setDeleteFlight(flight);
+                                      setOpenRowMenu(null);
+                                    }}
+                                  >
+                                    <span>🗑</span>
+                                    Delete
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -561,8 +645,51 @@ function Dashboard() {
           )}
         </div>
       </main>
+      {deleteFlight && (
+        <div
+          className="confirm-modal-backdrop"
+          onClick={() => setDeleteFlight(null)}
+        >
+          <div
+            className="confirm-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="confirm-modal-icon">!</div>
+
+            <h2>Are you sure?</h2>
+
+            <p>
+              Are you sure you want to delete flight request{" "}
+              <strong>{deleteFlight.id}</strong>?
+            </p>
+
+            <p className="confirm-modal-note">
+              This action cannot be undone.
+            </p>
+
+            <div className="confirm-modal-actions">
+              <button
+                type="button"
+                className="confirm-cancel-button"
+                onClick={() => setDeleteFlight(null)}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="confirm-delete-button"
+                onClick={() => setDeleteFlight(null)}
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default Dashboard;
+

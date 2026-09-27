@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "../style/CrewPassengers.css";
 import { api } from "../services/api";
+import Loader from "../components/Loader";
 
 type CrewMember = {
   id: string;
@@ -30,6 +31,33 @@ type Props = {
 
 type ApiRecord = Record<string, unknown>;
 
+type CrewDetail = {
+  ClientCrewID?: number;
+  ClientCrewName?: string;
+  ClientCrewEmailID?: string;
+  ClientCrewContactNo?: string;
+  ClientCrewNationality?: string;
+  ClientCrewPassport?: string;
+  ClientCrewDob?: string;
+  PassportExpiry?: string;
+  Duties?: string;
+  Gender?: string;
+  status?: string;
+};
+
+type PassengerDetail = {
+  ClientPassengerID?: number;
+  ClientPassengerName?: string;
+  ClientPassengerEmailID?: string;
+  ClientPassengerContactNo?: string;
+  ClientPassengerNationality?: string;
+  ClientPassengerPassport?: string;
+  ClientPassengerDob?: string;
+  PassportExpiry?: string;
+  Gender?: string;
+  status?: string;
+};
+
 const getValue = (
   row: ApiRecord,
   keys: string[],
@@ -47,101 +75,83 @@ const getValue = (
 };
 
 const getRows = (response: unknown): ApiRecord[] => {
-  if (Array.isArray(response)) {
-    return response as ApiRecord[];
-  }
+  if (Array.isArray(response)) return response as ApiRecord[];
 
   if (response && typeof response === "object") {
     const result = response as Record<string, unknown>;
 
-    if (Array.isArray(result.data)) {
-      return result.data as ApiRecord[];
-    }
-
-    if (Array.isArray(result.crew)) {
-      return result.crew as ApiRecord[];
-    }
-
-    if (Array.isArray(result.passengers)) {
+    if (Array.isArray(result.data)) return result.data as ApiRecord[];
+    if (Array.isArray(result.crew)) return result.crew as ApiRecord[];
+    if (Array.isArray(result.passengers))
       return result.passengers as ApiRecord[];
-    }
   }
 
   return [];
 };
 
+const formatDate = (value?: string) => {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
 const mapCrew = (row: ApiRecord): CrewMember => ({
-  id: getValue(
-    row,
-    ["ClientCrewID", "ServiceRequestCrewID", "CrewID", "id"]
-  ),
-  name: getValue(
-    row,
-    ["CrewName", "Name", "FullName", "name"]
-  ),
-  role: getValue(
-    row,
-    ["Role", "CrewRole", "Designation", "Position"]
-  ),
-  license: getValue(
-    row,
-    ["License", "LicenseNumber", "LicenseNo"]
-  ),
-  phone: getValue(
-    row,
-    ["Phone", "PhoneNumber", "Mobile", "ContactNumber"]
-  ),
-  email: getValue(
-    row,
-    ["Email", "EmailAddress"]
-  ),
-  status: getValue(
-    row,
-    ["Status", "CrewStatus", "AvailabilityStatus"],
-    "Unknown"
-  ),
-  nationality: getValue(
-    row,
-    ["Nationality", "Country"]
-  ),
+  id: getValue(row, [
+    "ServiceRequestCrewID",
+    "ClientCrewID",
+    "CrewID",
+    "id",
+  ]),
+  name: getValue(row, ["ClientCrewName", "CrewName", "Name"]),
+  role: getValue(row, ["Duties", "Role", "Designation"]),
+  license: getValue(row, [
+    "ClientCrewPassport",
+    "License",
+    "LicenseNumber",
+  ]),
+  phone: getValue(row, [
+    "ClientCrewContactNo",
+    "Phone",
+    "ContactNumber",
+  ]),
+  email: getValue(row, ["ClientCrewEmailID", "Email"]),
+  status: getValue(row, ["status", "Status"], "Active"),
+  nationality: getValue(row, [
+    "ClientCrewNationality",
+    "Nationality",
+  ]),
 });
 
 const mapPassenger = (row: ApiRecord): Passenger => ({
-  id: getValue(
-    row,
-    [
-      "ClientPassengerID",
-      "CharterPassengerID",
-      "ServiceRequestPassengerID",
-      "PassengerID",
-      "id",
-    ]
-  ),
-  name: getValue(
-    row,
-    ["PassengerName", "Name", "FullName", "name"]
-  ),
-  email: getValue(
-    row,
-    ["Email", "EmailAddress"]
-  ),
-  phone: getValue(
-    row,
-    ["Phone", "PhoneNumber", "Mobile", "ContactNumber"]
-  ),
-  nationality: getValue(
-    row,
-    ["Nationality", "Country"]
-  ),
-  passport: getValue(
-    row,
-    ["Passport", "PassportNumber", "PassportNo"]
-  ),
-  status: getValue(
-    row,
-    ["Status", "PassengerStatus"],
-    "Unknown"
-  ),
+  id: getValue(row, [
+    "ServiceRequestPassengerID",
+    "ClientPassengerID",
+    "PassengerID",
+    "id",
+  ]),
+  name: getValue(row, ["ClientPassengerName", "PassengerName", "Name"]),
+  email: getValue(row, ["ClientPassengerEmailID", "Email"]),
+  phone: getValue(row, [
+    "ClientPassengerContactNo",
+    "Phone",
+    "ContactNumber",
+  ]),
+  nationality: getValue(row, [
+    "ClientPassengerNationality",
+    "Nationality",
+  ]),
+  passport: getValue(row, [
+    "ClientPassengerPassport",
+    "Passport",
+  ]),
+  status: getValue(row, ["status", "Status"], "Active"),
 });
 
 export default function CrewPassengers({
@@ -165,9 +175,15 @@ export default function CrewPassengers({
     CrewMember | Passenger | null
   >(null);
 
+  const [details, setDetails] = useState<
+    CrewDetail | PassengerDetail | null
+  >(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState("");
+
   const isCrew = activeTab === "crew";
 
-  // Fetch crew and passenger records
+  /* ---------- fetch lists ---------- */
   useEffect(() => {
     let cancelled = false;
 
@@ -183,14 +199,11 @@ export default function CrewPassengers({
         }
       } catch (err) {
         console.error("Crew API error:", err);
-
         if (!cancelled) {
           setCrewError("Crew records load nahi ho paaye.");
         }
       } finally {
-        if (!cancelled) {
-          setCrewLoading(false);
-        }
+        if (!cancelled) setCrewLoading(false);
       }
     };
 
@@ -206,14 +219,11 @@ export default function CrewPassengers({
         }
       } catch (err) {
         console.error("Passengers API error:", err);
-
         if (!cancelled) {
           setPassengerError("Passenger records load nahi ho paaye.");
         }
       } finally {
-        if (!cancelled) {
-          setPassengerLoading(false);
-        }
+        if (!cancelled) setPassengerLoading(false);
       }
     };
 
@@ -225,7 +235,39 @@ export default function CrewPassengers({
     };
   }, []);
 
-  // Crew search and filter
+  /* ---------- fetch detail ---------- */
+  const openDetails = async (person: CrewMember | Passenger) => {
+    setSelectedPerson(person);
+    setDetails(null);
+    setDetailsError("");
+    setDetailsLoading(true);
+
+    try {
+      const res =
+        "role" in person
+          ? await api.getCrewById(person.id)
+          : await api.getPassengerById(person.id);
+
+      const payload =
+        (res as { data?: CrewDetail | PassengerDetail }).data ??
+        (res as CrewDetail | PassengerDetail);
+
+      setDetails(payload);
+    } catch (err) {
+      console.error("Detail API error:", err);
+      setDetailsError("Details load nahi ho paayi.");
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const closeDetails = () => {
+    setSelectedPerson(null);
+    setDetails(null);
+    setDetailsError("");
+  };
+
+  /* ---------- filters ---------- */
   const crewFiltered = useMemo(() => {
     return crewData.filter((person) => {
       const query = search.toLowerCase().trim();
@@ -249,7 +291,6 @@ export default function CrewPassengers({
     });
   }, [crewData, search, statusFilter]);
 
-  // Passenger search and filter
   const passengerFiltered = useMemo(() => {
     return passengerData.filter((person) => {
       const query = search.toLowerCase().trim();
@@ -284,9 +325,7 @@ export default function CrewPassengers({
   const loading = isCrew ? crewLoading : passengerLoading;
   const error = isCrew ? crewError : passengerError;
 
-  const retry = () => {
-    window.location.reload();
-  };
+  const retry = () => window.location.reload();
 
   return (
     <div className="cp-page">
@@ -356,7 +395,6 @@ export default function CrewPassengers({
           </span>
         </div>
 
-        {/* Tabs */}
         <div className="cp-tabs">
           <button
             className={isCrew ? "cp-tab active" : "cp-tab"}
@@ -364,7 +402,7 @@ export default function CrewPassengers({
               setActiveTab("crew");
               setSearch("");
               setStatusFilter("All");
-              setSelectedPerson(null);
+              closeDetails();
             }}
           >
             <span>✈</span> Crew Members
@@ -377,7 +415,7 @@ export default function CrewPassengers({
               setActiveTab("passengers");
               setSearch("");
               setStatusFilter("All");
-              setSelectedPerson(null);
+              closeDetails();
             }}
           >
             <span>♙</span> Passengers
@@ -385,7 +423,6 @@ export default function CrewPassengers({
           </button>
         </div>
 
-        {/* Search and filter */}
         <div className="cp-toolbar">
           <div className="cp-search">
             <span>⌕</span>
@@ -423,14 +460,12 @@ export default function CrewPassengers({
           </select>
         </div>
 
-        {/* Loading */}
         {loading && (
           <div className="cp-empty">
-            Loading {isCrew ? "crew" : "passenger"} records...
+            Loading {isCrew ? "crew" : "passenger"} <Loader />
           </div>
         )}
 
-        {/* Error */}
         {!loading && error && (
           <div className="cp-empty">
             <p>{error}</p>
@@ -440,7 +475,6 @@ export default function CrewPassengers({
           </div>
         )}
 
-        {/* Crew table */}
         {!loading && !error && isCrew && (
           <div className="cp-table-wrap">
             <table className="cp-table">
@@ -491,7 +525,7 @@ export default function CrewPassengers({
                     <td>
                       <button
                         className="cp-view-btn"
-                        onClick={() => setSelectedPerson(person)}
+                        onClick={() => openDetails(person)}
                       >
                         View Details <span>→</span>
                       </button>
@@ -511,7 +545,6 @@ export default function CrewPassengers({
           </div>
         )}
 
-        {/* Passenger table */}
         {!loading && !error && !isCrew && (
           <div className="cp-table-wrap">
             <table className="cp-table">
@@ -550,7 +583,9 @@ export default function CrewPassengers({
 
                     <td>
                       <span
-                        className={`cp-status ${person.status.toLowerCase()}`}
+                        className={`cp-status ${person.status
+                          .toLowerCase()
+                          .replace(" ", "-")}`}
                       >
                         <span className="cp-status-dot" />
                         {person.status}
@@ -560,7 +595,7 @@ export default function CrewPassengers({
                     <td>
                       <button
                         className="cp-view-btn"
-                        onClick={() => setSelectedPerson(person)}
+                        onClick={() => openDetails(person)}
                       >
                         View Details <span>→</span>
                       </button>
@@ -580,7 +615,6 @@ export default function CrewPassengers({
           </div>
         )}
 
-        {/* Footer */}
         {!loading && !error && (
           <div className="cp-table-footer">
             <span>
@@ -595,14 +629,8 @@ export default function CrewPassengers({
 
       {/* Details modal */}
       {selectedPerson && (
-        <div
-          className="cp-modal-overlay"
-          onClick={() => setSelectedPerson(null)}
-        >
-          <div
-            className="cp-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="cp-modal-overlay" onClick={closeDetails}>
+          <div className="cp-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cp-modal-header">
               <div>
                 <span className="cp-eyebrow">RECORD DETAILS</span>
@@ -611,7 +639,7 @@ export default function CrewPassengers({
 
               <button
                 className="cp-close-btn"
-                onClick={() => setSelectedPerson(null)}
+                onClick={closeDetails}
                 aria-label="Close details"
               >
                 ×
@@ -619,60 +647,122 @@ export default function CrewPassengers({
             </div>
 
             <div className="cp-modal-body">
-              <div className="cp-detail-row">
-                <span>Record ID</span>
-                <strong>{selectedPerson.id}</strong>
-              </div>
+              {detailsLoading && <p>Loading details...</p>}
 
-              <div className="cp-detail-row">
-                <span>Name</span>
-                <strong>{selectedPerson.name}</strong>
-              </div>
-
-              <div className="cp-detail-row">
-                <span>Email</span>
-                <strong>{selectedPerson.email}</strong>
-              </div>
-
-              <div className="cp-detail-row">
-                <span>Phone</span>
-                <strong>{selectedPerson.phone}</strong>
-              </div>
-
-              <div className="cp-detail-row">
-                <span>Nationality</span>
-                <strong>{selectedPerson.nationality}</strong>
-              </div>
-
-              {"role" in selectedPerson ? (
-                <>
-                  <div className="cp-detail-row">
-                    <span>Role</span>
-                    <strong>{selectedPerson.role}</strong>
-                  </div>
-
-                  <div className="cp-detail-row">
-                    <span>License</span>
-                    <strong>{selectedPerson.license}</strong>
-                  </div>
-                </>
-              ) : (
-                <div className="cp-detail-row">
-                  <span>Passport</span>
-                  <strong>{selectedPerson.passport}</strong>
-                </div>
+              {!detailsLoading && detailsError && (
+                <p>{detailsError}</p>
               )}
 
-              <div className="cp-detail-row">
-                <span>Status</span>
-                <strong>{selectedPerson.status}</strong>
-              </div>
+              {!detailsLoading && !detailsError && (
+                <>
+                  <div className="cp-detail-row">
+                    <span>Record ID</span>
+                    <strong>{selectedPerson.id}</strong>
+                  </div>
+
+                  <div className="cp-detail-row">
+                    <span>Name</span>
+                    <strong>{selectedPerson.name}</strong>
+                  </div>
+
+                  <div className="cp-detail-row">
+                    <span>Email</span>
+                    <strong>
+                      {"ClientCrewEmailID" in (details ?? {})
+                        ? (details as CrewDetail).ClientCrewEmailID ?? "—"
+                        : (details as PassengerDetail)
+                          ?.ClientPassengerEmailID ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="cp-detail-row">
+                    <span>Phone</span>
+                    <strong>
+                      {"ClientCrewContactNo" in (details ?? {})
+                        ? (details as CrewDetail).ClientCrewContactNo ?? "—"
+                        : (details as PassengerDetail)
+                          ?.ClientPassengerContactNo ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="cp-detail-row">
+                    <span>Nationality</span>
+                    <strong>
+                      {"ClientCrewNationality" in (details ?? {})
+                        ? (details as CrewDetail).ClientCrewNationality ?? "—"
+                        : (details as PassengerDetail)
+                          ?.ClientPassengerNationality ?? "—"}
+                    </strong>
+                  </div>
+
+                  {isCrew ? (
+                    <>
+                      <div className="cp-detail-row">
+                        <span>Role</span>
+                        <strong>
+                          {(details as CrewDetail)?.Duties ?? "—"}
+                        </strong>
+                      </div>
+
+                      <div className="cp-detail-row">
+                        <span>Passport</span>
+                        <strong>
+                          {(details as CrewDetail)
+                            ?.ClientCrewPassport ?? "—"}
+                        </strong>
+                      </div>
+
+                      <div className="cp-detail-row">
+                        <span>Date of birth</span>
+                        <strong>
+                          {formatDate(
+                            (details as CrewDetail)?.ClientCrewDob
+                          )}
+                        </strong>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="cp-detail-row">
+                        <span>Passport</span>
+                        <strong>
+                          {(details as PassengerDetail)
+                            ?.ClientPassengerPassport ?? "—"}
+                        </strong>
+                      </div>
+
+                      <div className="cp-detail-row">
+                        <span>Date of birth</span>
+                        <strong>
+                          {formatDate(
+                            (details as PassengerDetail)
+                              ?.ClientPassengerDob
+                          )}
+                        </strong>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="cp-detail-row">
+                    <span>Gender</span>
+                    <strong>
+                      {(details as CrewDetail)?.Gender ??
+                        (details as PassengerDetail)?.Gender ??
+                        "—"}
+                    </strong>
+                  </div>
+
+                  <div className="cp-detail-row">
+                    <span>Status</span>
+                    <strong>
+                      {selectedPerson.status}
+                    </strong>
+                  </div>
+                </>
+              )}
             </div>
 
-            <button
-              className="cp-modal-done"
-              onClick={() => setSelectedPerson(null)}
-            >
+            <button className="cp-modal-done" onClick={closeDetails}>
               Close Details
             </button>
           </div>

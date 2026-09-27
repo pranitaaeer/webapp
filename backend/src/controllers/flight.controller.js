@@ -1,26 +1,6 @@
-// import pool from "../config/db.js";
-
-// export const getFlightRequests = async (req, res, next) => {
-//   try {
-//     const [rows] = await pool.query(
-//       "SELECT * FROM service_request LIMIT 100"
-//     );
-
-//     res.status(200).json({
-//       success: true,
-//       count: rows.length,
-//       data: rows,
-//     });
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
 import pool from "../config/db.js";
 
-/* ---------------------------------------------------------
-   GET /flight-requests   →  List (table ke liye)
---------------------------------------------------------- */
+
 export const getFlightRequests = async (req, res, next) => {
   try {
     const [rows] = await pool.query(`
@@ -30,7 +10,8 @@ export const getFlightRequests = async (req, res, next) => {
         sr.DateCreated                 AS DateCreated,
         sr.AircraftID                  AS AircraftID,
         c.ClientName                   AS ClientName,
-        a.AircraftName                 AS AircraftName,
+        a.Registration                 AS AircraftName,
+        a.AircraftType                 AS AircraftType,
         leg.SectorFrom                 AS FromAirport,
         leg.SectorTo                   AS ToAirport,
         leg.DateCreated                AS FlightDate,
@@ -61,14 +42,11 @@ export const getFlightRequests = async (req, res, next) => {
   }
 };
 
-/* ---------------------------------------------------------
-   GET /flight-requests/:id   →  Single detail (modal ke liye)
---------------------------------------------------------- */
+
 export const getFlightRequestById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Main request
     const [reqRows] = await pool.query(
       `
       SELECT
@@ -83,7 +61,8 @@ export const getFlightRequestById = async (req, res, next) => {
         sr.ClientID,
         sr.AircraftID,
         c.ClientName              AS ClientName,
-        a.AircraftName            AS AircraftName
+        a.Registration            AS AircraftName,
+        a.AircraftType            AS AircraftType
       FROM service_request sr
       LEFT JOIN client c   ON c.ClientID   = sr.ClientID
       LEFT JOIN aircraft a ON a.AircraftID = sr.AircraftID
@@ -100,7 +79,6 @@ export const getFlightRequestById = async (req, res, next) => {
       });
     }
 
-    // Legs (route)
     const [legs] = await pool.query(
       `
       SELECT
@@ -118,7 +96,6 @@ export const getFlightRequestById = async (req, res, next) => {
       [id]
     );
 
-    // Passengers count
     const [paxRows] = await pool.query(
       `SELECT COUNT(*) AS total
        FROM service_request_passengers
