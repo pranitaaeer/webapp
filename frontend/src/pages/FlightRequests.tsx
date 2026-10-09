@@ -223,7 +223,7 @@ export default function FlightRequests() {
       setDetails(payload);
     } catch (err) {
       console.error("Flight detail API error:", err);
-      setDetailsError("Details load nahi ho paayi.");
+      setDetailsError("please try again");
     } finally {
       setDetailsLoading(false);
     }

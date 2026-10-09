@@ -40,6 +40,8 @@ type AircraftDetail = {
   CruiseSpeed?: number;
   Carbonoffset?: string;
   EtopsEnable?: string;
+  CharterPrice?: number;
+  CharterCost?: number;
 };
 
 const getValue = (
@@ -133,7 +135,7 @@ function Aircraft() {
         setAircraftList(rows.map(mapAircraft));
       } catch (err) {
         console.error("Aircraft API error:", err);
-        setError("Aircraft data load nahi ho paaya. Please try again.");
+        setError("Please try again.");
       } finally {
         setLoading(false);
       }
@@ -159,7 +161,7 @@ function Aircraft() {
       setDetails(payload);
     } catch (err) {
       console.error("Aircraft detail API error:", err);
-      setDetailsError("Details load nahi ho paayi.");
+      setDetailsError("please try again");
     } finally {
       setDetailsLoading(false);
     }
@@ -509,6 +511,27 @@ function Aircraft() {
                       <strong>{details.NoOfCrewCapacity}</strong>
                     </div>
                   )}
+                  {/* ✅ NAYA — Charter Price */}
+                  {details?.CharterPrice !== undefined &&
+                    details?.CharterPrice !== null && (
+                      <div>
+                        <span>Charter Price</span>
+                        <strong>
+                          ₹ {Number(details.CharterPrice).toLocaleString("en-IN")}
+                        </strong>
+                      </div>
+                    )}
+
+                  {/* ✅ NAYA — Charter Cost */}
+                  {details?.CharterCost !== undefined &&
+                    details?.CharterCost !== null && (
+                      <div>
+                        <span>Charter Cost</span>
+                        <strong>
+                          ₹ {Number(details.CharterCost).toLocaleString("en-IN")}
+                        </strong>
+                      </div>
+                    )}
                 </>
               )}
             </div>

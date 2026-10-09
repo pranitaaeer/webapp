@@ -255,7 +255,7 @@ export default function CrewPassengers({
       setDetails(payload);
     } catch (err) {
       console.error("Detail API error:", err);
-      setDetailsError("Details load nahi ho paayi.");
+      setDetailsError("please try again.");
     } finally {
       setDetailsLoading(false);
     }
@@ -721,7 +721,7 @@ export default function CrewPassengers({
                         </strong>
                       </div>
                     </>
-                  ) : (
+                  ) : ( 
                     <>
                       <div className="cp-detail-row">
                         <span>Passport</span>
